@@ -23,33 +23,31 @@ pip install -e .
 ```sh
 DOWNSAMPLE_SCALE=1  # can be 2 or 4 or 8
 python train.py \
-  ` # Speech model arch.      ` \
-  --speech_model_config \
-             wav2vec2           \
-  ` # Text model architecture ` \
+  ` # Speech model architecture `\
+  --speech_model_config wav2vec2   \
+  ` # Text model architecture `  \
   --nlp_model_config    \
-             facebook/bart-base \
-  ` # Mixing Method           ` \
-  --SpeechMixEED        \
-                                \
+      facebook/bart-base           \
+  ` # Mixing Method           `  \
+  --SpeechMixEED                   \
   \
-  --dataset     librispeech_asr \
-  --train_split train.100       \
-  --field       clean           \
-  --test_split  validation      \
+  --dataset     librispeech_asr    \
+  --train_split train.100          \
+  --field       clean              \
+  --test_split  validation         \
   \
-  --batch      4                \
-  --grad_accum 20               \
-  --epoch      30               \
-  --lr         4e-5             \
+  --batch      4                   \
+  --grad_accum 20                  \
+  --epoch      30                  \
+  --lr         4e-5                \
   \
-  --warmup_steps      500       \
-  --share_layer_ratio 0         \
+  --warmup_steps      500          \
+  --share_layer_ratio 0            \
   --down_scale \
-            ${DOWNSAMPLE_SCALE} \
+      ${DOWNSAMPLE_SCALE}          \
   \
-  --wandb                       \
-  --worker 15                   \
+  --wandb                          \
+  --worker 15                      \
   #
 ```
 
