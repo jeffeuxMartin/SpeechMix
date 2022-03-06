@@ -3,6 +3,7 @@ import os
 import sys
 import argparse
 from typing import Dict, List, Union, Optional
+from pprint import pprint
 
 from dataclasses import dataclass
 
@@ -227,7 +228,7 @@ MODEL_CARDS = {
          speechmix.SpeechMixGAN),
     'SpeechMixAdapt':
         ("SpeechMixAdapt", 
-         speechmix.SpeechMixAdapt),
+         speechmix.SpeechMixAdapter),
     'HFSpeechMixED':
         ("HFSpeechMixED", 
          speechmix.HFSpeechMixED),
@@ -245,7 +246,7 @@ MODEL_CARDS = {
          speechmix.HFSpeechMixGAN),
     'HFSpeechMixAdapt':
         ("HFSpeechMixAdapt", 
-         speechmix.HFSpeechMixAdapt),
+         speechmix.HFSpeechMixAdapter),
     None:
         ("SpeechMixEED", 
          speechmix.SpeechMixEED),
@@ -271,19 +272,21 @@ def main(arg=None):
     global MODEL_CARDS, MODEL_CANDIDATES
 
     # region --- 1. parse args
-    input_arg, other_arg = (
+    input_arg, dother_arg = (
         parse_args(sys.argv[1:]) if arg is None else 
         parse_args(arg))
-    print("input_arg", input_arg)
+    print("input_arg", "\033[0;31m")
+    pprint(input_arg)
+    print("\033[0m")
     # endregion
     # region --- >>> 1. get model
     for model_key in MODEL_CANDIDATES:
-        if input_args[model_key]:
+        if input_arg[model_key]:
             model_type = MODEL_CARDS[model_key]
             break
     else: model_type = MODEL_CARDS[None]
     model_type, _type =  model_type
-    model = _type(**input_args)
+    model = _type(**input_arg)
 
     # endregion
     # region --- >>> 0.

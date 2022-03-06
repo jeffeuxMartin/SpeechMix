@@ -1,3 +1,4 @@
+# region --- < IMPORTS > --- #
 import math
 
 from torch import nn
@@ -10,6 +11,7 @@ from transformers import (
 import torch
 import s3prl.hub as hub
 import torch.nn.functional as F
+# endregion  < imports > --- #
 
 
 def handle_decoder_input_none(decoder_config, batch=1, device="cpu"):
@@ -20,7 +22,7 @@ def handle_decoder_input_none(decoder_config, batch=1, device="cpu"):
 
 def shift_tokens_right(
     input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int
-):
+  ):
     shifted_input_ids = input_ids.new_zeros(input_ids.shape)
     shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
     shifted_input_ids[:, 0] = decoder_start_token_id
