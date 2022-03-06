@@ -13,9 +13,9 @@ import torch.nn.functional as F
 
 
 def handle_decoder_input_none(decoder_config, batch=1, device="cpu"):
-    return torch.tensor([[decoder_config.decoder_start_token_id]] * batch).to(
-        device
-    )
+    return torch.tensor(
+        [[decoder_config.decoder_start_token_id]] * batch
+    ).to(device)
 
 
 def shift_tokens_right(
