@@ -118,7 +118,7 @@ class SpeechMixEED(nn.Module):
             "encoder",
         ],
         **kwargs
-    ):
+      ):
         super(SpeechMixEED, self).__init__()
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
@@ -234,7 +234,7 @@ class SpeechMixEED(nn.Module):
         attention_mask=None,
         decoder_input_ids=None,
         labels=None,
-    ):
+      ):
         if inputs_embeds is not None:
             output = self.decoder_model(
                 inputs_embeds=inputs_embeds,
@@ -257,7 +257,7 @@ class SpeechMixEED(nn.Module):
         decoder_input_ids=None,
         labels=None,
         return_model_detail=False,
-    ):
+      ):
         if decoder_input_ids is None and labels is None:
             decoder_input_ids = handle_decoder_input_none(
                 self.decoder_model.config,
