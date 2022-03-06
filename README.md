@@ -18,26 +18,34 @@ git clone and cd into this project.
 pip install -e .
 ```
 
-## base
+## Basic Version
 
 ```sh
+#####################################################
 python train.py \
   --speech_model_config wav2vec2           \
+  ` # Speech model architecture` \
   --nlp_model_config    facebook/bart-base \
+  ` # Text model architexture` \
   --SpeechMixEED                           \
+  ` # Mixing Method` \
+  \
   --dataset             librispeech_asr    \
-  --field               clean              \
   --train_split         train.100          \
+  --field               clean              \
   --test_split          validation         \
+  \
   --batch               4                  \
   --grad_accum          20                 \
   --epoch               30                 \
-  --worker              15                 \
+  --lr                  4e-5               \
+  \
+  --warmup_steps        500                \
   --share_layer_ratio   0                  \
   --down_scale          1                  \
-  --lr                  4e-5               \
-  --warmup_steps        500                \
+  \
   --wandb                                  \
+  --worker              15                 \
   #
 ```
 
