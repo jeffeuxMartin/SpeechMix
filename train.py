@@ -9,15 +9,15 @@ from dataclasses import dataclass
 
 import torch
 
-from datasets import (load_dataset, 
-                      Audio, 
+from datasets import (load_dataset,
+                      Audio,
                       load_from_disk)
-from transformers import (Trainer, 
-                          TrainingArguments, 
-                          EarlyStoppingCallback, 
-                          AutoTokenizer, 
-                          TrainerCallback, 
-                          TrainerState, 
+from transformers import (Trainer,
+                          TrainingArguments,
+                          EarlyStoppingCallback,
+                          AutoTokenizer,
+                          TrainerCallback,
+                          TrainerState,
                           TrainerControl)
 
 import asrp
@@ -34,9 +34,9 @@ class DataCollatorWithPadding:
     selftype: bool = False
 
     def __call__(
-        self, 
-        features: List[Dict[str, 
-        Union[List[int], 
+        self,
+        features: List[Dict[str,
+        Union[List[int],
         torch.Tensor]]]
     ) -> Dict[str, torch.Tensor]:
         batch = {}
@@ -86,10 +86,10 @@ class FreezingCallback(TrainerCallback):
             self.default_param_fix[name] = param.requires_grad
         self.freeze_layers = int(len(self.default_param_fix.keys()) / freeze_epoch)
 
-    def on_epoch_begin(self, 
-        args: TrainingArguments, 
-        state: TrainerState, 
-        control: TrainerControl, 
+    def on_epoch_begin(self,
+        args: TrainingArguments,
+        state: TrainerState,
+        control: TrainerControl,
         **kwargs
     ):
         if state.epoch < self.freeze_epoch:
@@ -105,19 +105,22 @@ class FreezingCallback(TrainerCallback):
         self.current_step_idx += 1
 
     def on_save(
-        self, 
-        args: TrainingArguments, 
-        state: TrainerState, 
-        control: TrainerControl, 
+        self,
+        args: TrainingArguments,
+        state: TrainerState,
+        control: TrainerControl,
         **kwargs
     ):
         for name, param in self.trainer.model.named_parameters():
             param.requires_grad = True
 
-def compute_metrics(pred):
+def compute_metrics(
+        pred,
+        # model,
+      ):
     global model
     try: model
-    except NameError as e: 
+    except NameError as e:
         raise AssertionError("Please initialize a model!")
 
     pred_ids = pred.predictions
@@ -133,11 +136,11 @@ def compute_metrics(pred):
     wer = asrp.wer(label_str, pred_str)
     return {"cer": cer, "wer": wer}
 
-def prepare_dataset(batch, selftype=False):
-    global model
-    try: model
-    except NameError as e: 
-        raise AssertionError("Please initialize a model!")
+def prepare_dataset(batch, model, selftype=False):
+    # global model
+    # try: model
+    # except NameError as e:
+    #     raise AssertionError("Please initialize a model!")
 
     audio = batch["audio"]
     batch["input_values"] = audio["array"]
@@ -215,40 +218,40 @@ def parse_args(args):
 
 MODEL_CARDS = {
     'SpeechMixEED':
-        ("SpeechMixEED", 
+        ("SpeechMixEED",
          speechmix.SpeechMixEED),
     'SpeechMixFixed':
-        ("SpeechMixFixed", 
+        ("SpeechMixFixed",
          speechmix.SpeechMixFixed),
     'SpeechMixSelf':
-        ("SpeechMixSelf", 
+        ("SpeechMixSelf",
          speechmix.SpeechMixSelf),
     'SpeechMixGAN':
-        ("SpeechMixGAN", 
+        ("SpeechMixGAN",
          speechmix.SpeechMixGAN),
     'SpeechMixAdapt':
-        ("SpeechMixAdapt", 
+        ("SpeechMixAdapt",
          speechmix.SpeechMixAdapter),
     'HFSpeechMixED':
-        ("HFSpeechMixED", 
+        ("HFSpeechMixED",
          speechmix.HFSpeechMixED),
     'HFSpeechMixEED':
-        ("HFSpeechMixEED", 
+        ("HFSpeechMixEED",
          speechmix.HFSpeechMixEED),
     'HFSpeechMixFixed':
-        ("HFSpeechMixFixed", 
+        ("HFSpeechMixFixed",
          speechmix.HFSpeechMixFixed),
     'HFSpeechMixSelf':
-        ("HFSpeechMixSelf", 
+        ("HFSpeechMixSelf",
          speechmix.HFSpeechMixSelf),
     'HFSpeechMixGAN':
-        ("HFSpeechMixGAN", 
+        ("HFSpeechMixGAN",
          speechmix.HFSpeechMixGAN),
     'HFSpeechMixAdapt':
-        ("HFSpeechMixAdapt", 
+        ("HFSpeechMixAdapt",
          speechmix.HFSpeechMixAdapter),
     None:
-        ("SpeechMixEED", 
+        ("SpeechMixEED",
          speechmix.SpeechMixEED),
 }
 
@@ -273,7 +276,7 @@ def main(arg=None):
 
     # region --- 1. parse args
     input_arg, dother_arg = (
-        parse_args(sys.argv[1:]) if arg is None else 
+        parse_args(sys.argv[1:]) if arg is None else
         parse_args(arg))
     print("input_arg", "\033[0;33m")
     pprint(input_arg)
@@ -290,7 +293,7 @@ def main(arg=None):
 
     # endregion
     # region --- >>> 0.
-    selftype = ('SpeechMixSelf' in model_type 
+    selftype = ('SpeechMixSelf' in model_type
              or 'SpeechMixGAN' in model_type)
 
     # endregion
@@ -310,11 +313,11 @@ def main(arg=None):
         train_ds = load_from_disk(cache_path_train)
         valid_ds = load_from_disk(cache_path_valid)
     else:
-        train_ds = load_dataset(input_arg["dataset"], 
-                                input_arg["field"], 
+        train_ds = load_dataset(input_arg["dataset"],
+                                input_arg["field"],
                                 split=input_arg["train_split"])
-        valid_ds = load_dataset(input_arg["dataset"], 
-                                input_arg["field"], 
+        valid_ds = load_dataset(input_arg["dataset"],
+                                input_arg["field"],
                                 split=input_arg["test_split"])
 
         train_ds = train_ds.cast_column(
@@ -322,12 +325,16 @@ def main(arg=None):
         valid_ds = valid_ds.cast_column(
             "audio", Audio(sampling_rate=16_000))
 
-        train_ds = train_ds.map(prepare_dataset, 
-                                num_proc=1, 
-                                fn_kwargs={"selftype": selftype})
-        valid_ds = valid_ds.map(prepare_dataset, 
-                                num_proc=1, 
-                                fn_kwargs={"selftype": selftype})
+        train_ds = train_ds.map(prepare_dataset,
+                                num_proc=1,
+                                fn_kwargs={
+                                    "selftype": selftype,
+                                    "model": model})
+        valid_ds = valid_ds.map(prepare_dataset,
+                                num_proc=1,
+                                fn_kwargs={
+                                    "selftype": selftype,
+                                    "model": model})
 
         train_ds.save_to_disk(cache_path_train)
         valid_ds.save_to_disk(cache_path_valid)
@@ -335,7 +342,7 @@ def main(arg=None):
     # endregion
     # region --- >>> 0.
     data_collator = DataCollatorWithPadding(
-        tokenizer=model.tokenizer, 
+        tokenizer=model.tokenizer,
         padding=True,
         selftype=selftype)
 
@@ -389,4 +396,3 @@ def main(arg=None):
 
 
 if __name__ == "__main__": main()
-
