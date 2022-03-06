@@ -1,3 +1,4 @@
+######################################################~~~~~~~~~~~~~~~~~~~~~~~~~~
 import os
 import sys
 import argparse
@@ -45,7 +46,6 @@ class DataCollatorWithPadding:
             label_features,
             padding=self.padding,
             max_length=self.max_length_labels,
-######################################################~~~~~~~~~~~~~~~~~~~~~~~~~~
             pad_to_multiple_of=self.pad_to_multiple_of_labels,
             return_tensors="pt",
         )
@@ -212,77 +212,137 @@ def parse_args(args):
     other_arg = {k.replace("--", ""): v for k, v in zip(model_arg[:-1:2], model_arg[1::2])}
     return input_arg, other_arg
 
+MODEL_CARDS = {
+    'SpeechMixEED':
+        ("SpeechMixEED", 
+         speechmix.SpeechMixEED),
+    'SpeechMixFixed':
+        ("SpeechMixFixed", 
+         speechmix.SpeechMixFixed),
+    'SpeechMixSelf':
+        ("SpeechMixSelf", 
+         speechmix.SpeechMixSelf),
+    'SpeechMixGAN':
+        ("SpeechMixGAN", 
+         speechmix.SpeechMixGAN),
+    'SpeechMixAdapt':
+        ("SpeechMixAdapt", 
+         speechmix.SpeechMixAdapt),
+    'HFSpeechMixED':
+        ("HFSpeechMixED", 
+         speechmix.HFSpeechMixED),
+    'HFSpeechMixEED':
+        ("HFSpeechMixEED", 
+         speechmix.HFSpeechMixEED),
+    'HFSpeechMixFixed':
+        ("HFSpeechMixFixed", 
+         speechmix.HFSpeechMixFixed),
+    'HFSpeechMixSelf':
+        ("HFSpeechMixSelf", 
+         speechmix.HFSpeechMixSelf),
+    'HFSpeechMixGAN':
+        ("HFSpeechMixGAN", 
+         speechmix.HFSpeechMixGAN),
+    'HFSpeechMixAdapt':
+        ("HFSpeechMixAdapt", 
+         speechmix.HFSpeechMixAdapt),
+    None:
+        ("SpeechMixEED", 
+         speechmix.SpeechMixEED),
+}
+
+MODEL_CANDIDATES = [
+    'SpeechMixEED',
+    'SpeechMixFixed',
+    'SpeechMixSelf',
+    'SpeechMixGAN',
+    'SpeechMixAdapt',
+    'HFSpeechMixED',
+    'HFSpeechMixEED',
+    'HFSpeechMixFixed',
+    'HFSpeechMixSelf',
+    'HFSpeechMixGAN',
+    'HFSpeechMixAdapt',
+]
 
 def main(arg=None):
     global FreezingCallback, DataCollatorWithPadding
     global compute_metrics, prepare_dataset, parse_args
+    global MODEL_CARDS, MODEL_CANDIDATES
 
-    input_arg, other_arg = parse_args(sys.argv[1:]) if arg is None else parse_args(arg)
+    # region --- 1. parse args
+    input_arg, other_arg = (
+        parse_args(sys.argv[1:]) if arg is None else 
+        parse_args(arg))
     print("input_arg", input_arg)
-    # region --- model selection
-    if input_arg['SpeechMixEED']:
-        model_type = "SpeechMixEED"
-        model = speechmix.SpeechMixEED(**input_arg)
-    elif input_arg['SpeechMixFixed']:
-        model_type = "SpeechMixFixed"
-        model = speechmix.SpeechMixFixed(**input_arg)
-    elif input_arg['SpeechMixSelf']:
-        model_type = "SpeechMixSelf"
-        model = speechmix.SpeechMixSelf(**input_arg)
-    elif input_arg['SpeechMixGAN']:
-        model_type = "SpeechMixGAN"
-        model = speechmix.SpeechMixGAN(**input_arg)
-    elif input_arg['SpeechMixAdapt']:
-        model_type = "SpeechMixAdapt"
-        model = speechmix.SpeechMixAdapt(**input_arg)
-    elif input_arg['HFSpeechMixED']:
-        model_type = "HFSpeechMixED"
-        model = speechmix.HFSpeechMixED(**input_arg)
-    elif input_arg['HFSpeechMixEED']:
-        model_type = "HFSpeechMixEED"
-        model = speechmix.HFSpeechMixEED(**input_arg)
-    elif input_arg['HFSpeechMixFixed']:
-        model_type = "HFSpeechMixFixed"
-        model = speechmix.HFSpeechMixFixed(**input_arg)
-    elif input_arg['HFSpeechMixSelf']:
-        model_type = "HFSpeechMixSelf"
-        model = speechmix.HFSpeechMixSelf(**input_arg)
-    elif input_arg['HFSpeechMixGAN']:
-        model_type = "HFSpeechMixGAN"
-        model = speechmix.HFSpeechMixGAN(**input_arg)
-    elif input_arg['HFSpeechMixAdapt']:
-        model_type = "HFSpeechMixAdapt"
-        model = speechmix.HFSpeechMixAdapt(**input_arg)
-    else:
-        model_type = "SpeechMixEED"
-        model = speechmix.SpeechMixEED(**input_arg)
-    # endregion --- model selection
+    # endregion
+    # region --- >>> 1. get model
+    for model_key in MODEL_CANDIDATES:
+        if input_args[model_key]:
+            model_type = MODEL_CARDS[model_key]
+            break
+    else: model_type = MODEL_CARDS[None]
+    model_type, _type =  model_type
+    model = _type(**input_args)
 
-    selftype = ('SpeechMixSelf' in model_type or 'SpeechMixGAN' in model_type)
-    cache_path_train = f'./train_ds_{input_arg["dataset"]}_{input_arg["field"]}_{input_arg["train_split"]}.parquet'
-    cache_path_valid = f'./valid_ds_{input_arg["dataset"]}_{input_arg["field"]}_{input_arg["train_split"]}.parquet'
+    # endregion
+    # region --- >>> 0.
+    selftype = ('SpeechMixSelf' in model_type 
+             or 'SpeechMixGAN' in model_type)
+
+    # endregion
+    # region --- >>> 0.
+    cache_path_train = (
+        f'./train_ds'
+            f'_{input_arg["dataset"]}'
+            f'_{input_arg["field"]}'
+            f'_{input_arg["train_split"]}.parquet')
+    cache_path_valid = (
+        f'./valid_ds'
+            f'_{input_arg["dataset"]}'
+            f'_{input_arg["field"]}'
+            f'_{input_arg["train_split"]}.parquet')
 
     if os.path.exists(cache_path_train) and os.path.exists(cache_path_valid):
         train_ds = load_from_disk(cache_path_train)
         valid_ds = load_from_disk(cache_path_valid)
     else:
-        train_ds = load_dataset(input_arg["dataset"], input_arg["field"], split=input_arg["train_split"])
-        valid_ds = load_dataset(input_arg["dataset"], input_arg["field"], split=input_arg["test_split"])
+        train_ds = load_dataset(input_arg["dataset"], 
+                                input_arg["field"], 
+                                split=input_arg["train_split"])
+        valid_ds = load_dataset(input_arg["dataset"], 
+                                input_arg["field"], 
+                                split=input_arg["test_split"])
 
-        train_ds = train_ds.cast_column("audio", Audio(sampling_rate=16_000))
-        valid_ds = valid_ds.cast_column("audio", Audio(sampling_rate=16_000))
+        train_ds = train_ds.cast_column(
+            "audio", Audio(sampling_rate=16_000))
+        valid_ds = valid_ds.cast_column(
+            "audio", Audio(sampling_rate=16_000))
 
-        train_ds = train_ds.map(prepare_dataset, num_proc=1, fn_kwargs={"selftype": selftype})
-        valid_ds = valid_ds.map(prepare_dataset, num_proc=1, fn_kwargs={"selftype": selftype})
+        train_ds = train_ds.map(prepare_dataset, 
+                                num_proc=1, 
+                                fn_kwargs={"selftype": selftype})
+        valid_ds = valid_ds.map(prepare_dataset, 
+                                num_proc=1, 
+                                fn_kwargs={"selftype": selftype})
 
         train_ds.save_to_disk(cache_path_train)
         valid_ds.save_to_disk(cache_path_valid)
 
-    data_collator = DataCollatorWithPadding(tokenizer=model.tokenizer, padding=True,
-                                            selftype=selftype)
+    # endregion
+    # region --- >>> 0.
+    data_collator = DataCollatorWithPadding(
+        tokenizer=model.tokenizer, 
+        padding=True,
+        selftype=selftype)
 
+    # endregion
+    # region --- >>> 0.
     training_args = TrainingArguments(
-        output_dir=f"./{input_arg['speech_model_config']}_{input_arg['nlp_model_config']}_{model_type}_{input_arg.get('notes', '')}",
+        output_dir=(f"./{input_arg['speech_model_config']}"
+                    f"_{input_arg['nlp_model_config']}"
+                    f"_{model_type}"
+                    f"_{input_arg.get('notes', '')}"),
         per_device_train_batch_size=int(input_arg['batch']),
         per_device_eval_batch_size=int(input_arg['batch']),
         gradient_accumulation_steps=int(input_arg['grad_accum']),
@@ -299,7 +359,7 @@ def main(arg=None):
         warmup_steps=input_arg.get('warmup_steps', 500),
         save_total_limit=input_arg.get('save_total_limit', 2),
         dataloader_num_workers=input_arg.get('worker', 10),
-        report_to="wandb" if input_arg.get('wandb', True) else "none",
+        report_to=("wandb" if input_arg.get('wandb', True) else "none"),
     )
     # some trainer problem - save all logistics on compute_metrics, cause out of memory, fix:argmax first;
     # dynamic padding on past key value, cause index error, fix: return only loss and logist
@@ -315,11 +375,14 @@ def main(arg=None):
         callbacks=[EarlyStoppingCallback(early_stopping_patience=20)],
     )
 
+    # endregion
+    # region --- >>> 0.
     # https://discuss.huggingface.co/t/gradual-layer-freezing/3381/4
     freezing_callback = FreezingCallback(trainer, model.encoder_model, 1000)
     trainer.add_callback(freezing_callback)
 
     trainer.train()
+    # endregion
 
 
 if __name__ == "__main__": main()
