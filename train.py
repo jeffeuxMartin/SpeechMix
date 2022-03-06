@@ -1,185 +1,226 @@
-import argparse
 import os
 import sys
-
-import asrp
-
-import speechmix
-from datasets import load_dataset, Audio, load_from_disk
-import torch
-from transformers import Trainer, TrainingArguments, EarlyStoppingCallback, AutoTokenizer, TrainerCallback, \
-    TrainerState, TrainerControl
+import argparse
 from typing import Dict, List, Union, Optional
+
 from dataclasses import dataclass
 
+import torch
 
-def main(arg=None):
-    def prepare_dataset(batch, selftype=False):
-        audio = batch["audio"]
-        batch["input_values"] = audio["array"]
-        batch["length"] = batch["input_values"].size
-        sent = batch["text"] if 'text' in batch else batch["sentence"]
-        sent = sent.lower()
-        gen_input = model.tokenizer(sent, add_special_tokens=False).input_ids
-        if selftype:
-            predicted = [model.decoder_model.config.decoder_start_token_id]
-            with torch.no_grad():
-                model.decoder_model.eval()
-                for _ in range(model.decoder_model.config.max_length):
-                    max_item = torch.argmax(
-                        model.decoder_model(input_ids=torch.tensor([gen_input], device=model.device),
-                                            output_hidden_states=True,
-                                            decoder_input_ids=torch.tensor(
-                                                [predicted],
-                                                device=model.device)).logits, -1)[:, -1].item()
-                    if model.decoder_model.config.eos_token_id == max_item:
-                        break
-                    predicted.append(max_item)
-            batch["text_input_ids"] = gen_input
-            batch['labels'] = predicted[1:]
+from datasets import (load_dataset, 
+                      Audio, 
+                      load_from_disk)
+from transformers import (Trainer, 
+                          TrainingArguments, 
+                          EarlyStoppingCallback, 
+                          AutoTokenizer, 
+                          TrainerCallback, 
+                          TrainerState, 
+                          TrainerControl)
+
+import asrp
+import speechmix
+
+
+class FreezingCallback(TrainerCallback):
+    def __init__(self, trainer, freeze_model, freeze_epoch=3):
+        self.trainer = trainer
+        self.freeze_model = freeze_model
+        self.freeze_epoch = freeze_epoch
+        self.current_step_idx = 0
+        self.default_param_fix = {}
+        self.name_list = []
+        for name, param in self.freeze_model.named_parameters():
+            self.name_list.append(name)
+            self.default_param_fix[name] = param.requires_grad
+        self.freeze_layers = int(len(self.default_param_fix.keys()) / freeze_epoch)
+
+    def on_epoch_begin(self, 
+        args: TrainingArguments, 
+        state: TrainerState, 
+        control: TrainerControl, 
+        **kwargs
+    ):
+        if state.epoch < self.freeze_epoch:
+            release = self.name_list[-int(self.freeze_layers * state.epoch):]
+            for name, param in self.freeze_model.named_parameters():
+                if name in release:
+                    param.requires_grad = True
+                else:
+                    param.requires_grad = False
         else:
-            batch['labels'] = gen_input
-        batch['labels'] += [model.tokenizer.eos_token_id]
-        batch["input_ids"] = batch["labels"]
-        return batch
+            for name, param in self.freeze_model.named_parameters():
+                param.requires_grad = self.default_param_fix[name]
+        self.current_step_idx += 1
 
-    def compute_metrics(pred):
-        pred_ids = pred.predictions
-        pred_ids = [i[i != -100] for i in pred_ids]
-        pred_str = model.tokenizer.batch_decode(pred_ids, skip_special_tokens=True, group_tokens=False)
-        # we do not want to group tokens when computing the metrics
-        label_ids = pred.label_ids
-        label_ids = [i[i != -100] for i in label_ids]
-        label_str = model.tokenizer.batch_decode(label_ids, skip_special_tokens=True, group_tokens=False)
-        # for l, p in zip(label_str, pred_str):
-        #     print(l, "======", p)
-        cer = asrp.cer(label_str, pred_str)
-        wer = asrp.wer(label_str, pred_str)
-        return {"cer": cer, "wer": wer}
+    def on_save(
+        self, 
+        args: TrainingArguments, 
+        state: TrainerState, 
+        control: TrainerControl, 
+        **kwargs
+    ):
+        for name, param in self.trainer.model.named_parameters():
+            param.requires_grad = True
 
-    @dataclass
-    class DataCollatorWithPadding:
-        tokenizer: AutoTokenizer
-        padding: Union[bool, str] = True
-        max_length: Optional[int] = None
-        max_length_labels: Optional[int] = None
-        pad_to_multiple_of: Optional[int] = None
-        pad_to_multiple_of_labels: Optional[int] = None
-        selftype: bool = False
+@dataclass
+class DataCollatorWithPadding:
+    tokenizer: AutoTokenizer
+    padding: Union[bool, str] = True
+    max_length: Optional[int] = None
+    max_length_labels: Optional[int] = None
+    pad_to_multiple_of: Optional[int] = None
+    pad_to_multiple_of_labels: Optional[int] = None
+    selftype: bool = False
 
-        def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
-            batch = {}
-            batch['input_values'] = [torch.tensor(feature["input_values"]) for feature in features]
-            label_features = [{"input_ids": feature['labels']} for feature in features]
+    def __call__(
+        self, 
+        features: List[Dict[str, 
+        Union[List[int], 
+        torch.Tensor]]]
+    ) -> Dict[str, torch.Tensor]:
+        batch = {}
+        batch['input_values'] = [torch.tensor(feature["input_values"]) for feature in features]
+        label_features = [{"input_ids": feature['labels']} for feature in features]
 
-            labels_batch = self.tokenizer.pad(
-                label_features,
+        labels_batch = self.tokenizer.pad(
+            label_features,
+            padding=self.padding,
+            max_length=self.max_length_labels,
+######################################################~~~~~~~~~~~~~~~~~~~~~~~~~~
+            pad_to_multiple_of=self.pad_to_multiple_of_labels,
+            return_tensors="pt",
+        )
+
+        if 'text_input_ids' in features[0]:
+            text_features = [{"input_ids": feature['text_input_ids']} for feature in features]
+            text_batch = self.tokenizer.pad(
+                text_features,
                 padding=self.padding,
                 max_length=self.max_length_labels,
                 pad_to_multiple_of=self.pad_to_multiple_of_labels,
                 return_tensors="pt",
             )
+            batch['text_input_ids'] = text_batch['input_ids']
+        labels_batch = labels_batch['input_ids'].masked_fill(labels_batch.attention_mask.ne(1), -100)
 
-            if 'text_input_ids' in features[0]:
-                text_features = [{"input_ids": feature['text_input_ids']} for feature in features]
-                text_batch = self.tokenizer.pad(
-                    text_features,
-                    padding=self.padding,
-                    max_length=self.max_length_labels,
-                    pad_to_multiple_of=self.pad_to_multiple_of_labels,
-                    return_tensors="pt",
-                )
-                batch['text_input_ids'] = text_batch['input_ids']
-            labels_batch = labels_batch['input_ids'].masked_fill(labels_batch.attention_mask.ne(1), -100)
+        # if bos token is appended in previous tokenization step,
+        # cut bos token here as it's append later anyway
+        if (labels_batch[:, 0] == self.tokenizer.bos_token_id).all().cpu().item():
+            labels_batch = labels_batch[:, 1:]
 
-            # if bos token is appended in previous tokenization step,
-            # cut bos token here as it's append later anyway
-            if (labels_batch[:, 0] == self.tokenizer.bos_token_id).all().cpu().item():
-                labels_batch = labels_batch[:, 1:]
+        batch['labels'] = labels_batch
 
-            batch['labels'] = labels_batch
+        torch.cuda.empty_cache()
+        return batch
 
-            torch.cuda.empty_cache()
-            return batch
+def compute_metrics(pred):
+    global model
+    try: model
+    except NameError as e: 
+        raise AssertionError("Please initialize a model!")
 
-    class FreezingCallback(TrainerCallback):
-        def __init__(self, trainer, freeze_model, freeze_epoch=3):
-            self.trainer = trainer
-            self.freeze_model = freeze_model
-            self.freeze_epoch = freeze_epoch
-            self.current_step_idx = 0
-            self.default_param_fix = {}
-            self.name_list = []
-            for name, param in self.freeze_model.named_parameters():
-                self.name_list.append(name)
-                self.default_param_fix[name] = param.requires_grad
-            self.freeze_layers = int(len(self.default_param_fix.keys()) / freeze_epoch)
+    pred_ids = pred.predictions
+    pred_ids = [i[i != -100] for i in pred_ids]
+    pred_str = model.tokenizer.batch_decode(pred_ids, skip_special_tokens=True, group_tokens=False)
+    # we do not want to group tokens when computing the metrics
+    label_ids = pred.label_ids
+    label_ids = [i[i != -100] for i in label_ids]
+    label_str = model.tokenizer.batch_decode(label_ids, skip_special_tokens=True, group_tokens=False)
+    # for l, p in zip(label_str, pred_str):
+    #     print(l, "======", p)
+    cer = asrp.cer(label_str, pred_str)
+    wer = asrp.wer(label_str, pred_str)
+    return {"cer": cer, "wer": wer}
 
-        def on_epoch_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-            if state.epoch < self.freeze_epoch:
-                release = self.name_list[-int(self.freeze_layers * state.epoch):]
-                for name, param in self.freeze_model.named_parameters():
-                    if name in release:
-                        param.requires_grad = True
-                    else:
-                        param.requires_grad = False
-            else:
-                for name, param in self.freeze_model.named_parameters():
-                    param.requires_grad = self.default_param_fix[name]
-            self.current_step_idx += 1
+def prepare_dataset(batch, selftype=False):
+    global model
+    try: model
+    except NameError as e: 
+        raise AssertionError("Please initialize a model!")
 
-        def on_save(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-            for name, param in self.trainer.model.named_parameters():
-                param.requires_grad = True
+    audio = batch["audio"]
+    batch["input_values"] = audio["array"]
+    batch["length"] = batch["input_values"].size
+    sent = batch["text"] if 'text' in batch else batch["sentence"]
+    sent = sent.lower()
+    gen_input = model.tokenizer(sent, add_special_tokens=False).input_ids
+    if selftype:
+        predicted = [model.decoder_model.config.decoder_start_token_id]
+        with torch.no_grad():
+            model.decoder_model.eval()
+            for _ in range(model.decoder_model.config.max_length):
+                max_item = torch.argmax(
+                    model.decoder_model(input_ids=torch.tensor([gen_input], device=model.device),
+                                        output_hidden_states=True,
+                                        decoder_input_ids=torch.tensor(
+                                            [predicted],
+                                            device=model.device)).logits, -1)[:, -1].item()
+                if model.decoder_model.config.eos_token_id == max_item:
+                    break
+                predicted.append(max_item)
+        batch["text_input_ids"] = gen_input
+        batch['labels'] = predicted[1:]
+    else:
+        batch['labels'] = gen_input
+    batch['labels'] += [model.tokenizer.eos_token_id]
+    batch["input_ids"] = batch["labels"]
+    return batch
 
-    def parse_args(args):
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--speech_model_config", type=str)
-        parser.add_argument("--nlp_model_config", type=str)
-        parser.add_argument("--SpeechMixEED", action='store_true')
-        parser.add_argument("--SpeechMixED", action='store_true')
-        parser.add_argument("--SpeechMixSelf", action='store_true')
-        parser.add_argument("--SpeechMixAdapt", action='store_true')
-        parser.add_argument("--SpeechMixGAN", action='store_true')
-        parser.add_argument("--SpeechMixFixed", action='store_true')
-        parser.add_argument("--HFSpeechMixEED", action='store_true')
-        parser.add_argument("--HFSpeechMixED", action='store_true')
-        parser.add_argument("--HFSpeechMixSelf", action='store_true')
-        parser.add_argument("--HFSpeechMixAdapt", action='store_true')
-        parser.add_argument("--HFSpeechMixGAN", action='store_true')
-        parser.add_argument("--HFSpeechMixFixed", action='store_true')
-        parser.add_argument("--dataset", type=str)
-        parser.add_argument("--field", type=str)
-        parser.add_argument("--train_split", type=str)
-        parser.add_argument("--test_split", type=str)
-        parser.add_argument("--notes", type=str)
-        parser.add_argument("--grad_accum", default=3, type=int)
-        parser.add_argument("--logging_steps", default=10, type=int)
-        parser.add_argument("--warmup_steps", default=10, type=int)
-        parser.add_argument("--save_total_limit", default=2, type=int)
-        # parser.add_argument("--max_grad_norm", default=10, type=int)
-        parser.add_argument("--worker", default=10, type=int)
-        parser.add_argument("--batch", type=int)
-        parser.add_argument("--epoch", default=1000, type=int)
-        parser.add_argument("--lr", type=float)
-        parser.add_argument("--eval_step", default=700, type=int)
-        parser.add_argument('--share_layer_ratio', default=0, type=float)
-        parser.add_argument('--down_scale', default=8, type=int)
-        parser.add_argument('--weighted_sum', action='store_true')
-        parser.add_argument('--fixed_parameters', action='store_true')
-        parser.add_argument('--fixed_except', nargs='+',
-                            default=["layer_norm", "encoder_attn", 'enc_to_dec_proj', 'length_adapter',
-                                     "layernorm_embedding", 'attention', 'encoder'])
-        parser.add_argument("--fp16", action='store_true')
-        parser.add_argument("--wandb", action='store_true')
+def parse_args(args):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--speech_model_config", type=str)
+    parser.add_argument("--nlp_model_config", type=str)
+    parser.add_argument("--SpeechMixEED", action='store_true')
+    parser.add_argument("--SpeechMixED", action='store_true')
+    parser.add_argument("--SpeechMixSelf", action='store_true')
+    parser.add_argument("--SpeechMixAdapt", action='store_true')
+    parser.add_argument("--SpeechMixGAN", action='store_true')
+    parser.add_argument("--SpeechMixFixed", action='store_true')
+    parser.add_argument("--HFSpeechMixEED", action='store_true')
+    parser.add_argument("--HFSpeechMixED", action='store_true')
+    parser.add_argument("--HFSpeechMixSelf", action='store_true')
+    parser.add_argument("--HFSpeechMixAdapt", action='store_true')
+    parser.add_argument("--HFSpeechMixGAN", action='store_true')
+    parser.add_argument("--HFSpeechMixFixed", action='store_true')
+    parser.add_argument("--dataset", type=str)
+    parser.add_argument("--field", type=str)
+    parser.add_argument("--train_split", type=str)
+    parser.add_argument("--test_split", type=str)
+    parser.add_argument("--notes", type=str)
+    parser.add_argument("--grad_accum", default=3, type=int)
+    parser.add_argument("--logging_steps", default=10, type=int)
+    parser.add_argument("--warmup_steps", default=10, type=int)
+    parser.add_argument("--save_total_limit", default=2, type=int)
+    # parser.add_argument("--max_grad_norm", default=10, type=int)
+    parser.add_argument("--worker", default=10, type=int)
+    parser.add_argument("--batch", type=int)
+    parser.add_argument("--epoch", default=1000, type=int)
+    parser.add_argument("--lr", type=float)
+    parser.add_argument("--eval_step", default=700, type=int)
+    parser.add_argument('--share_layer_ratio', default=0, type=float)
+    parser.add_argument('--down_scale', default=8, type=int)
+    parser.add_argument('--weighted_sum', action='store_true')
+    parser.add_argument('--fixed_parameters', action='store_true')
+    parser.add_argument('--fixed_except', nargs='+',
+                        default=["layer_norm", "encoder_attn", 'enc_to_dec_proj', 'length_adapter',
+                                    "layernorm_embedding", 'attention', 'encoder'])
+    parser.add_argument("--fp16", action='store_true')
+    parser.add_argument("--wandb", action='store_true')
 
-        input_arg, model_arg = parser.parse_known_args(args)
-        input_arg = {k: v for k, v in vars(input_arg).items() if v is not None}
-        other_arg = {k.replace("--", ""): v for k, v in zip(model_arg[:-1:2], model_arg[1::2])}
-        return input_arg, other_arg
+    input_arg, model_arg = parser.parse_known_args(args)
+    input_arg = {k: v for k, v in vars(input_arg).items() if v is not None}
+    other_arg = {k.replace("--", ""): v for k, v in zip(model_arg[:-1:2], model_arg[1::2])}
+    return input_arg, other_arg
+
+
+def main(arg=None):
+    global FreezingCallback, DataCollatorWithPadding
+    global compute_metrics, prepare_dataset, parse_args
 
     input_arg, other_arg = parse_args(sys.argv[1:]) if arg is None else parse_args(arg)
     print("input_arg", input_arg)
+    # region --- model selection
     if input_arg['SpeechMixEED']:
         model_type = "SpeechMixEED"
         model = speechmix.SpeechMixEED(**input_arg)
@@ -216,6 +257,7 @@ def main(arg=None):
     else:
         model_type = "SpeechMixEED"
         model = speechmix.SpeechMixEED(**input_arg)
+    # endregion --- model selection
 
     selftype = ('SpeechMixSelf' in model_type or 'SpeechMixGAN' in model_type)
     cache_path_train = f'./train_ds_{input_arg["dataset"]}_{input_arg["field"]}_{input_arg["train_split"]}.parquet'
@@ -281,5 +323,5 @@ def main(arg=None):
     trainer.train()
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__": main()
+
