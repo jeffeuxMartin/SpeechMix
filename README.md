@@ -23,12 +23,12 @@ pip install -e .
 ```sh
 DOWNSAMPLE_SCALE=1  # can be 2 or 4 or 8
 python train.py \
-  ` # Speech model architecture `\
+  ` # Speech model architecture ` \
   --speech_model_config wav2vec2   \
-  ` # Text model architecture `  \
+  ` # Text model architecture   ` \
   --nlp_model_config    \
       facebook/bart-base           \
-  ` # Mixing Method           `  \
+  ` # Mixing Method             ` \
   --SpeechMixEED                   \
   \
   --dataset     librispeech_asr    \
