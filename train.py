@@ -275,7 +275,7 @@ def main(arg=None):
     input_arg, dother_arg = (
         parse_args(sys.argv[1:]) if arg is None else 
         parse_args(arg))
-    print("input_arg", "\033[0;31m")
+    print("input_arg", "\033[0;33m")
     pprint(input_arg)
     print("\033[0m")
     # endregion
