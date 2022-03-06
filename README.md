@@ -6,7 +6,7 @@ Explore different way to mix speech model(wav2vec2, hubert) and nlp model(BART,T
 
 ### pip install
 
-```bash
+```sh
 pip install speechmix
 ```
 
@@ -14,12 +14,13 @@ pip install speechmix
 
 git clone and cd into this project.
 
-```bash
+```sh
 pip install -e .
 ```
 
 ## base
 
+```sh
 python train.py --speech_model_config wav2vec2 \
 --nlp_model_config facebook/bart-base \
 --SpeechMixEED \
@@ -36,9 +37,11 @@ python train.py --speech_model_config wav2vec2 \
 --lr 4e-5 \
 --warmup_steps 500 \
 --wandb
+```
 
 ## downscale 2/4/8
 
+```sh
 python train.py --speech_model_config wav2vec2 \
 --nlp_model_config facebook/bart-base \
 --SpeechMixEED \
@@ -55,7 +58,9 @@ python train.py --speech_model_config wav2vec2 \
 --lr 4e-5 \
 --warmup_steps 500 \
 --wandb
+```
 
+```sh
 python train.py --speech_model_config wav2vec2 \
 --nlp_model_config facebook/bart-base \
 --SpeechMixEED \
@@ -72,7 +77,9 @@ python train.py --speech_model_config wav2vec2 \
 --lr 4e-5 \
 --warmup_steps 500 \
 --wandb
+```
 
+```sh
 python train.py --speech_model_config wav2vec2 \
 --nlp_model_config facebook/bart-base \
 --SpeechMixEED \
@@ -89,3 +96,4 @@ python train.py --speech_model_config wav2vec2 \
 --lr 4e-5 \
 --warmup_steps 500 \
 --wandb
+```
