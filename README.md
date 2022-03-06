@@ -23,12 +23,12 @@ pip install -e .
 ```sh
 #####################################################
 python train.py \
-  --speech_model_config wav2vec2           \
-  ` # Speech model architecture` \
-  --nlp_model_config    facebook/bart-base \
-  ` # Text model architexture` \
-  --SpeechMixEED                           \
-  ` # Mixing Method` \
+  --speech_model_config wav2vec2           ` 
+    `` # Speech model architecture `       \
+  --nlp_model_config    facebook/bart-base ` 
+    `` # Text model architexture   `       \
+  --SpeechMixEED                           ` 
+    `` # Mixing Method             `       \
   \
   --dataset             librispeech_asr    \
   --train_split         train.100          \
